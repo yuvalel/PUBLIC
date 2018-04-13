@@ -62,6 +62,10 @@ def get_usage(samplesizes_filename, usage_filename, rawdata_folder):
     # second output is sample size file, with list of samples and id numbers (used in the usage file to indetify the sample) and number of unique reads and CDR3s
     import os
     
+    delmiter = '\t'
+    CDR3aa_column = 1 #CDR3aa column
+    status_column = 38 #seqeunces status column. set to -1 to not check status
+    
     inframe_filenames = [filename for filename in os.listdir(rawdata_folder)]
     with open(samplesizes_filename, 'w') as output_file: #open new empty file for writing samples sizes
         pass
@@ -73,9 +77,9 @@ def get_usage(samplesizes_filename, usage_filename, rawdata_folder):
             k = 0
             
             for line in data_file:
-                splt = line.split('\t')
-                if splt[38]=='In': #seqeunces status in column 38
-                    CDR3s_dict[splt[1]] = CDR3s_dict.get(splt[1],0) + 1 #CDR3aa in column 1
+                splt = line.split(delmiter)
+                if (status_column==-1) or (splt[status_column]=='In'): 
+                    CDR3s_dict[splt[CDR3aa_column]] = CDR3s_dict.get(splt[CDR3aa_column],0) + 1 
                     k += 1
     
         with open(samplesizes_filename, 'a') as output_file:
@@ -128,3 +132,32 @@ def AUROC_curve(sharing, pgens):
         if not(all(sharing) or not any(sharing)):
             AUC.append((min_shr_pub, metrics.roc_auc_score(sharing, pgens)))
     return AUC
+
+
+#%%
+    
+        
+def main(num_samples, survival_prob, sequence_filename, marginals_file_name, parms_file_name, V_anchor_pos_file, J_anchor_pos_file):
+    #generate seqeunces from a IGoR model and saves both full nt read and CDR3aa, with flat selection
+    import sys
+    import sequence_generation as seq_gen
+    import load_IGoR_model as load_model
+        
+    genomic_data = load_model.load_genomic_data_igor_model(parms_file_name, V_anchor_pos_file, J_anchor_pos_file)
+    genomic_data = seq_gen.construct_full_genomic_data(genomic_data)
+    genomic_model = load_model.load_and_process_igor_model(marginals_file_name)
+    CP_gm = seq_gen.compute_CP_gen_model_from_gen_model(genomic_model)
+
+    k=0
+    i=0
+    
+    output_file = open(sequence_filename, 'w')
+    while k < num_samples:
+        i += 1
+        current_CDR3_seq, current_fullnt = seq_gen.gen_rnd_prod_CDR3_and_full_ntseq(CP_gm, genomic_data) #generate seq
+        if hash(current_CDR3_seq) > ((1 - 2 * survival_prob)*sys.maxint): #seqeunce passes selection if hash value in the right range
+            output_file.write(current_CDR3_seq + ' ' + current_fullnt + '\n')
+            k += 1
+        
+    print 'generated ' + str(i) + ' recombinations, keeping and saving ' + str(k)
+    output_file.close()
