@@ -27,11 +27,11 @@ def get_sharing_histogram(usage_filename, sharing_filename):
             for entry in splt[1:]: #count 1 for each entry in usage file for a CDR3 to get its sharing number
                 share += 1 
             sharing_hist[share] += 1 #add one to sharing historgram for current sharing number 
-    if sharing_filename!='NO_SAVE':
+    if sharing_filename!='NO_SAVE': #don't save sharing as file if file name given is 'NO_SAVE'
         with open(sharing_filename, 'wb') as f : #save sharing to pickle file
             pickle.dump(sharing_hist, f, protocol=pickle.HIGHEST_PROTOCOL)
     return sharing_hist
-
+#%%
 def get_sharing_nums(usage_filename): 
     #construct a vector of sharing numbers per sequence from usage file
     import numpy as np
@@ -53,8 +53,13 @@ def get_sharing_nums(usage_filename):
                 share += 1 
             sharing[i] = share #add one to sharing historgram for current sharing number 
     return sharing
-
+#%%
 def get_usage(samplesizes_filename, usage_filename, rawdata_folder):
+    # creates a usage file of CDR3s from many files of different samples
+    # input files are located in rawdata_folder
+    # expected are column oriented tet files with the CDR3 in one colume and the status of the CDR3 in a different one (will take only seqeunces classified as 'In', for inframe)
+    # first output is usage file, with one line for each CDR3 and multiple entries for every sample that contained this CDR3. sorted by CDR3
+    # second output is sample size file, with list of samples and id numbers (used in the usage file to indetify the sample) and number of unique reads and CDR3s
     import os
     
     inframe_filenames = [filename for filename in os.listdir(rawdata_folder)]
@@ -104,16 +109,22 @@ def get_usage(samplesizes_filename, usage_filename, rawdata_folder):
 #%%
             
 def ROC_curve(sharing, pgens, min_shr_pub):
+    # returns ROC curve for PUBLIC over a sample, for a specific minimal sharing for publicness
     import numpy as np
     from sklearn import metrics
     ROC = np.array(metrics.roc_curve([x>min_shr_pub for x in sharing], pgens))
     return ROC
 
-def AUROC_curve(sharing, pgens, min_shr_pub):
+#%%
+def AUROC_curve(sharing, pgens):
+    # return AUC values for different values for the minimal sharing for being public as list of tuples
     import numpy as np
     from sklearn import metrics    
     max_share = max(sharing)
-    values_AUC = np.sort(list(set([x.astype(int) for x in np.geomspace(1,max_share,200)])))
-    sharing = [x>k for x in sharing]
-    if not(all(sharing) or not any(sharing)):
-        AUC = metrics.roc_auc_score(sharing, pgens)
+    values_AUC = np.sort(list(set([x.astype(int) for x in np.geomspace(1,max_share,200)]))) #values of minimal sharing in which to calcualte AUC
+    AUC = []
+    for min_shr_pub in values_AUC:
+        sharing = [x>min_shr_pub for x in sharing]
+        if not(all(sharing) or not any(sharing)):
+            AUC.append((min_shr_pub, metrics.roc_auc_score(sharing, pgens)))
+    return AUC
